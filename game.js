@@ -11,7 +11,6 @@ const MAX_ITEMS = 5; // Maximum number of items that can exist simultaneously
 
 // High scores management
 const MAX_HIGH_SCORES = 10;
-let highScores = [];
 
 // Item types
 const ITEM_TYPES = {
@@ -32,6 +31,159 @@ let gameRunning = false;
 let gameLoop;
 let goldenAppleTimer = null;
 let isGoldenAppleActive = false;
+
+// Session management
+let currentSessionId = null;
+let sessions = {};
+
+// Generate a unique session ID
+function generateSessionId() {
+    return 'session_' + Date.now();
+}
+
+// Create a new session
+function createNewSession() {
+    currentSessionId = generateSessionId();
+    sessions[currentSessionId] = {
+        id: currentSessionId,
+        startTime: new Date(),
+        scores: []
+    };
+    saveSessions();
+    updateSessionSelector();
+    updateSessionInfo();
+    updateHighScoresDisplay();
+}
+
+// Save all sessions to localStorage
+function saveSessions() {
+    const sessionsData = {};
+    for (const [id, session] of Object.entries(sessions)) {
+        sessionsData[id] = {
+            ...session,
+            startTime: session.startTime.toISOString()
+        };
+    }
+    localStorage.setItem('snakeSessions', JSON.stringify(sessionsData));
+}
+
+// Load all sessions from localStorage
+function loadSessions() {
+    const savedSessions = localStorage.getItem('snakeSessions');
+    if (savedSessions) {
+        const sessionsData = JSON.parse(savedSessions);
+        for (const [id, session] of Object.entries(sessionsData)) {
+            sessions[id] = {
+                ...session,
+                startTime: new Date(session.startTime)
+            };
+        }
+    }
+    // Create new session if none exists
+    if (Object.keys(sessions).length === 0) {
+        createNewSession();
+    } else {
+        // Set current session to the most recent one
+        currentSessionId = Object.keys(sessions).sort().pop();
+    }
+    updateSessionSelector();
+    updateSessionInfo();
+    updateHighScoresDisplay();
+}
+
+// Update session selector dropdown
+function updateSessionSelector() {
+    const selector = document.getElementById('sessionSelector');
+    selector.innerHTML = '';
+    
+    // Sort sessions by start time (newest first)
+    const sortedSessions = Object.values(sessions).sort((a, b) => 
+        b.startTime - a.startTime
+    );
+
+    sortedSessions.forEach(session => {
+        const option = document.createElement('option');
+        option.value = session.id;
+        option.textContent = session.startTime.toLocaleString();
+        if (session.id === currentSessionId) {
+            option.selected = true;
+        }
+        selector.appendChild(option);
+    });
+}
+
+// Update session info display
+function updateSessionInfo() {
+    const sessionInfo = document.getElementById('sessionInfo');
+    const session = sessions[currentSessionId];
+    if (session) {
+        const duration = Math.floor((new Date() - session.startTime) / 1000 / 60); // in minutes
+        sessionInfo.textContent = `Session started: ${session.startTime.toLocaleTimeString()}\nDuration: ${duration} min`;
+    }
+}
+
+// Change current session
+function changeSession() {
+    const selector = document.getElementById('sessionSelector');
+    currentSessionId = selector.value;
+    updateSessionInfo();
+    updateHighScoresDisplay();
+}
+
+// Add a new score to current session
+function addHighScore(score, level) {
+    if (!currentSessionId || !sessions[currentSessionId]) {
+        createNewSession();
+    }
+
+    const newScore = { 
+        score, 
+        level, 
+        date: new Date().toLocaleString(),
+        timestamp: Date.now()
+    };
+    
+    sessions[currentSessionId].scores.push(newScore);
+    sessions[currentSessionId].scores.sort((a, b) => b.score - a.score);
+    
+    if (sessions[currentSessionId].scores.length > MAX_HIGH_SCORES) {
+        sessions[currentSessionId].scores = sessions[currentSessionId].scores.slice(0, MAX_HIGH_SCORES);
+    }
+    
+    saveSessions();
+    updateHighScoresDisplay();
+}
+
+// Update the high scores display
+function updateHighScoresDisplay() {
+    const highScoresList = document.getElementById('highScoresList');
+    highScoresList.innerHTML = '';
+
+    if (!currentSessionId || !sessions[currentSessionId]) {
+        highScoresList.innerHTML = '<div class="score-entry">No session selected</div>';
+        return;
+    }
+
+    const scores = sessions[currentSessionId].scores;
+    if (scores.length === 0) {
+        highScoresList.innerHTML = '<div class="score-entry">No scores yet</div>';
+        return;
+    }
+
+    scores.forEach((entry, index) => {
+        const scoreEntry = document.createElement('div');
+        scoreEntry.className = 'score-entry';
+        scoreEntry.innerHTML = `
+            <span class="rank">#${index + 1}</span>
+            <div class="details">
+                <div class="score">${entry.score} pts</div>
+                <div class="level">Level ${entry.level}</div>
+                <div class="time">${entry.date}</div>
+            </div>
+        `;
+        highScoresList.appendChild(scoreEntry);
+    });
+}
 
 // Calculate current game speed based on level
 function getCurrentGameSpeed() {
@@ -73,56 +225,6 @@ function generateItemType() {
         return ITEM_TYPES.GOLDEN;
     }
     return ITEM_TYPES.NORMAL;
-}
-
-// Load high scores from localStorage
-function loadHighScores() {
-    const savedScores = localStorage.getItem('snakeHighScores');
-    if (savedScores) {
-        highScores = JSON.parse(savedScores);
-    }
-    updateHighScoresDisplay();
-}
-
-// Save high scores to localStorage
-function saveHighScores() {
-    localStorage.setItem('snakeHighScores', JSON.stringify(highScores));
-}
-
-// Add a new score to high scores
-function addHighScore(score, level) {
-    const newScore = { score, level, date: new Date().toLocaleDateString() };
-    highScores.push(newScore);
-    highScores.sort((a, b) => b.score - a.score); // Sort in descending order
-    if (highScores.length > MAX_HIGH_SCORES) {
-        highScores = highScores.slice(0, MAX_HIGH_SCORES);
-    }
-    saveHighScores();
-    updateHighScoresDisplay();
-}
-
-// Update the high scores display
-function updateHighScoresDisplay() {
-    const highScoresList = document.getElementById('highScoresList');
-    highScoresList.innerHTML = '';
-
-    if (highScores.length === 0) {
-        highScoresList.innerHTML = '<div class="score-entry">No scores yet</div>';
-        return;
-    }
-
-    highScores.forEach((entry, index) => {
-        const scoreEntry = document.createElement('div');
-        scoreEntry.className = 'score-entry';
-        scoreEntry.innerHTML = `
-            <span class="rank">#${index + 1}</span>
-            <div class="details">
-                <div class="score">${entry.score} pts</div>
-                <div class="level">Level ${entry.level}</div>
-            </div>
-        `;
-        highScoresList.appendChild(scoreEntry);
-    });
 }
 
 // Check if a position is occupied by any item
@@ -268,8 +370,8 @@ function initGame() {
     if (gameLoop) clearInterval(gameLoop);
     gameLoop = setInterval(update, getCurrentGameSpeed());
 
-    // Load high scores
-    loadHighScores();
+    // Load sessions and create new one if needed
+    loadSessions();
 
     // Draw initial state
     draw();
@@ -445,7 +547,7 @@ function gameOver() {
     }
     
     // Add score to high scores if it's high enough
-    if (highScores.length < MAX_HIGH_SCORES || score > highScores[highScores.length - 1].score) {
+    if (sessions[currentSessionId].scores.length < MAX_HIGH_SCORES || score > sessions[currentSessionId].scores[sessions[currentSessionId].scores.length - 1].score) {
         addHighScore(score, level);
     }
     
@@ -479,6 +581,9 @@ document.addEventListener('keydown', (event) => {
 // Start the game when the page loads
 window.addEventListener('load', () => {
     console.log('Starting Snake Game...');
-    loadHighScores(); // Load high scores immediately
+    loadSessions(); // Load sessions immediately
     initGame();
-}); 
+});
+
+// Make changeSession available globally
+window.changeSession = changeSession; 

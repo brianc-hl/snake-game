@@ -47,6 +47,33 @@
             font-size: 1.2em;
         }
 
+        .session-selector {
+            margin-bottom: 15px;
+            width: 100%;
+        }
+
+        .session-selector select {
+            width: 100%;
+            padding: 8px;
+            background-color: #1a1a1a;
+            color: #4CAF50;
+            border: 1px solid #4CAF50;
+            border-radius: 4px;
+            cursor: pointer;
+        }
+
+        .session-selector select:focus {
+            outline: none;
+            border-color: #45a049;
+        }
+
+        .session-info {
+            font-size: 0.9em;
+            color: #45a049;
+            margin-bottom: 10px;
+            text-align: center;
+        }
+
         .score-entry {
             display: flex;
             justify-content: space-between;
@@ -152,6 +179,14 @@
         </div>
         <div class="high-scores">
             <h2>High Scores</h2>
+            <div class="session-selector">
+                <select id="sessionSelector" onchange="changeSession()">
+                    <!-- Sessions will be added here -->
+                </select>
+            </div>
+            <div class="session-info" id="sessionInfo">
+                <!-- Session info will be shown here -->
+            </div>
             <div id="highScoresList">
                 <!-- High scores will be inserted here -->
             </div>
