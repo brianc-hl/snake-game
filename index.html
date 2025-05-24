@@ -16,11 +16,84 @@
             font-family: Arial, sans-serif;
         }
 
+        .game-wrapper {
+            display: flex;
+            gap: 20px;
+            align-items: flex-start;
+        }
+
         .game-container {
             position: relative;
             width: 400px;
             height: 400px;
-            margin: 20px auto;
+            margin: 20px 0;
+        }
+
+        .high-scores {
+            background-color: #2a2a2a;
+            border: 2px solid #4CAF50;
+            border-radius: 5px;
+            padding: 15px;
+            width: 200px;
+            max-height: 400px;
+            overflow-y: auto;
+            color: #4CAF50;
+        }
+
+        .high-scores h2 {
+            margin: 0 0 15px 0;
+            text-align: center;
+            color: #4CAF50;
+            font-size: 1.2em;
+        }
+
+        .score-entry {
+            display: flex;
+            justify-content: space-between;
+            padding: 8px 0;
+            border-bottom: 1px solid #3a3a3a;
+        }
+
+        .score-entry:last-child {
+            border-bottom: none;
+        }
+
+        .score-entry .rank {
+            color: #45a049;
+            font-weight: bold;
+            margin-right: 10px;
+        }
+
+        .score-entry .details {
+            flex-grow: 1;
+        }
+
+        .score-entry .score {
+            font-weight: bold;
+        }
+
+        .score-entry .level {
+            font-size: 0.9em;
+            color: #45a049;
+        }
+
+        /* Customize scrollbar for high scores */
+        .high-scores::-webkit-scrollbar {
+            width: 8px;
+        }
+
+        .high-scores::-webkit-scrollbar-track {
+            background: #1a1a1a;
+            border-radius: 4px;
+        }
+
+        .high-scores::-webkit-scrollbar-thumb {
+            background: #4CAF50;
+            border-radius: 4px;
+        }
+
+        .high-scores::-webkit-scrollbar-thumb:hover {
+            background: #45a049;
         }
 
         #gameCanvas {
@@ -42,7 +115,7 @@
             left: 50%;
             transform: translate(-50%, -50%);
             background-color: rgba(0, 0, 0, 0.9);
-            color: #4CAF50;
+            color: #e32d2dc5;
             padding: 20px;
             border-radius: 10px;
             text-align: center;
@@ -67,14 +140,22 @@
         .controls {
             margin-top: 20px;
             text-align: center;
-            color: #4CAF50;
+            color: rgb(76, 139, 175);
         }
     </style>
 </head>
 <body>
-    <div id="score">Score: 0</div>
-    <div class="game-container">
-        <canvas id="gameCanvas" width="400" height="400"></canvas>
+    <div id="score">Score: 0 | Level: 1</div>
+    <div class="game-wrapper">
+        <div class="game-container">
+            <canvas id="gameCanvas" width="400" height="400"></canvas>
+        </div>
+        <div class="high-scores">
+            <h2>High Scores</h2>
+            <div id="highScoresList">
+                <!-- High scores will be inserted here -->
+            </div>
+        </div>
     </div>
     <div class="controls">
         Use arrow keys to move the snake

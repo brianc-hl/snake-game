@@ -1,17 +1,217 @@
 // Game settings
 const GRID_SIZE = 20; // Size of each grid cell
-const GAME_SPEED = 150; // Game speed in milliseconds
+const BASE_GAME_SPEED = 150; // Base game speed in milliseconds
 const CANVAS_SIZE = 400; // Canvas size in pixels
+const LEVEL_UP_SCORE = 20; // Score needed to level up
+const BASE_FOOD_SIZE = 1; // Base food size in grid units
+const BASE_FOOD_SCORE = 10; // Base score for food
+const GOLDEN_APPLE_DURATION = 10000; // Golden apple effect duration in milliseconds
+const SLOW_SPEED = 200; // Speed during golden apple effect
+const MAX_ITEMS = 5; // Maximum number of items that can exist simultaneously
+
+// High scores management
+const MAX_HIGH_SCORES = 10;
+let highScores = [];
+
+// Item types
+const ITEM_TYPES = {
+    NORMAL: 'normal',
+    GOLDEN: 'golden',
+    BOMB: 'bomb'
+};
 
 // Game variables
 let canvas, ctx;
 let snake = [];
-let food = {};
+let items = []; // Array to hold all items
 let direction = 'right';
 let nextDirection = 'right';
 let score = 0;
+let level = 1;
 let gameRunning = false;
 let gameLoop;
+let goldenAppleTimer = null;
+let isGoldenAppleActive = false;
+
+// Calculate current game speed based on level
+function getCurrentGameSpeed() {
+    if (isGoldenAppleActive) {
+        return SLOW_SPEED;
+    }
+    return Math.max(BASE_GAME_SPEED - (level - 1) * 15, 50);
+}
+
+// Calculate current food size based on level
+function getCurrentFoodSize() {
+    return Math.max(BASE_FOOD_SIZE - (level - 1) * 0.1, 0.5); // Decrease by 0.1 per level, minimum 0.5
+}
+
+// Calculate current food score based on level
+function getCurrentFoodScore() {
+    return Math.max(BASE_FOOD_SCORE - (level - 1), 1); // Decrease by 1 per level, minimum 1
+}
+
+// Calculate bomb spawn chance based on level
+function getBombSpawnChance() {
+    return Math.min(0.1 + (level - 1) * 0.05, 0.4); // Increases by 5% per level, max 40%
+}
+
+// Calculate golden apple spawn chance
+function getGoldenAppleSpawnChance() {
+    return 0.1; // 10% chance
+}
+
+// Generate random item type based on probabilities
+function generateItemType() {
+    const bombChance = getBombSpawnChance();
+    const goldenChance = getGoldenAppleSpawnChance();
+    const random = Math.random();
+
+    if (random < bombChance) {
+        return ITEM_TYPES.BOMB;
+    } else if (random < bombChance + goldenChance) {
+        return ITEM_TYPES.GOLDEN;
+    }
+    return ITEM_TYPES.NORMAL;
+}
+
+// Load high scores from localStorage
+function loadHighScores() {
+    const savedScores = localStorage.getItem('snakeHighScores');
+    if (savedScores) {
+        highScores = JSON.parse(savedScores);
+    }
+    updateHighScoresDisplay();
+}
+
+// Save high scores to localStorage
+function saveHighScores() {
+    localStorage.setItem('snakeHighScores', JSON.stringify(highScores));
+}
+
+// Add a new score to high scores
+function addHighScore(score, level) {
+    const newScore = { score, level, date: new Date().toLocaleDateString() };
+    highScores.push(newScore);
+    highScores.sort((a, b) => b.score - a.score); // Sort in descending order
+    if (highScores.length > MAX_HIGH_SCORES) {
+        highScores = highScores.slice(0, MAX_HIGH_SCORES);
+    }
+    saveHighScores();
+    updateHighScoresDisplay();
+}
+
+// Update the high scores display
+function updateHighScoresDisplay() {
+    const highScoresList = document.getElementById('highScoresList');
+    highScoresList.innerHTML = '';
+
+    if (highScores.length === 0) {
+        highScoresList.innerHTML = '<div class="score-entry">No scores yet</div>';
+        return;
+    }
+
+    highScores.forEach((entry, index) => {
+        const scoreEntry = document.createElement('div');
+        scoreEntry.className = 'score-entry';
+        scoreEntry.innerHTML = `
+            <span class="rank">#${index + 1}</span>
+            <div class="details">
+                <div class="score">${entry.score} pts</div>
+                <div class="level">Level ${entry.level}</div>
+            </div>
+        `;
+        highScoresList.appendChild(scoreEntry);
+    });
+}
+
+// Check if a position is occupied by any item
+function isPositionOccupied(x, y) {
+    return items.some(item => item.x === x && item.y === y) ||
+           snake.some(segment => segment.x === x && segment.y === y);
+}
+
+// Generate a random position that's not occupied
+function generateRandomPosition() {
+    const maxPos = CANVAS_SIZE / GRID_SIZE - 1;
+    const wallBias = Math.random() < 0.7; // 70% chance to spawn near walls
+    
+    let position;
+    if (wallBias) {
+        const wall = Math.floor(Math.random() * 4);
+        switch (wall) {
+            case 0: // top wall
+                position = {
+                    x: Math.floor(Math.random() * maxPos),
+                    y: Math.floor(Math.random() * 2)
+                };
+                break;
+            case 1: // right wall
+                position = {
+                    x: maxPos - Math.floor(Math.random() * 2),
+                    y: Math.floor(Math.random() * maxPos)
+                };
+                break;
+            case 2: // bottom wall
+                position = {
+                    x: Math.floor(Math.random() * maxPos),
+                    y: maxPos - Math.floor(Math.random() * 2)
+                };
+                break;
+            case 3: // left wall
+                position = {
+                    x: Math.floor(Math.random() * 2),
+                    y: Math.floor(Math.random() * maxPos)
+                };
+                break;
+        }
+    } else {
+        position = {
+            x: Math.floor(Math.random() * maxPos),
+            y: Math.floor(Math.random() * maxPos)
+        };
+    }
+
+    // Keep trying new positions until we find an unoccupied one
+    while (isPositionOccupied(position.x, position.y)) {
+        position = {
+            x: Math.floor(Math.random() * maxPos),
+            y: Math.floor(Math.random() * maxPos)
+        };
+    }
+
+    return position;
+}
+
+// Check if there are any apples left (normal or golden)
+function hasApples() {
+    return items.some(item => item.type === ITEM_TYPES.NORMAL || item.type === ITEM_TYPES.GOLDEN);
+}
+
+// Reset and respawn all items
+function resetAndRespawnItems() {
+    // Clear all items
+    items = [];
+    
+    // Generate new items until we reach MAX_ITEMS
+    while (items.length < MAX_ITEMS) {
+        generateItem();
+    }
+}
+
+// Generate a new item
+function generateItem() {
+    if (items.length >= MAX_ITEMS) return; // Don't generate if at max items
+
+    const position = generateRandomPosition();
+    // Generate any type of item with normal probabilities
+    const type = generateItemType();
+    
+    items.push({
+        ...position,
+        type: type
+    });
+}
 
 // Initialize the game
 function initGame() {
@@ -39,47 +239,77 @@ function initGame() {
         {x: 4, y: 10}
     ];
 
-    // Generate initial food
-    generateFood();
+    // Initialize items
+    items = [];
+    // Generate initial items
+    for (let i = 0; i < MAX_ITEMS; i++) {
+        generateItem();
+    }
 
     // Reset game state
     direction = 'right';
     nextDirection = 'right';
     score = 0;
+    level = 1;
     updateScore();
     gameRunning = true;
+
+    // Reset golden apple state
+    isGoldenAppleActive = false;
+    if (goldenAppleTimer) {
+        clearTimeout(goldenAppleTimer);
+        goldenAppleTimer = null;
+    }
 
     // Hide game over screen
     document.getElementById('gameOver').style.display = 'none';
 
-    // Start game loop
+    // Start game loop with current speed
     if (gameLoop) clearInterval(gameLoop);
-    gameLoop = setInterval(update, GAME_SPEED);
+    gameLoop = setInterval(update, getCurrentGameSpeed());
+
+    // Load high scores
+    loadHighScores();
 
     // Draw initial state
     draw();
 }
 
-// Generate food at random position
-function generateFood() {
-    const maxPos = CANVAS_SIZE / GRID_SIZE - 1;
-    food = {
-        x: Math.floor(Math.random() * maxPos),
-        y: Math.floor(Math.random() * maxPos)
-    };
+// Update score display
+function updateScore() {
+    document.getElementById('score').textContent = `Score: ${score} | Level: ${level}`;
+}
 
-    // Make sure food doesn't spawn on snake
-    while (snake.some(segment => segment.x === food.x && segment.y === food.y)) {
-        food = {
-            x: Math.floor(Math.random() * maxPos),
-            y: Math.floor(Math.random() * maxPos)
-        };
+// Check for level up
+function checkLevelUp() {
+    if (score >= level * LEVEL_UP_SCORE) {
+        level++;
+        // Update game speed
+        clearInterval(gameLoop);
+        gameLoop = setInterval(update, getCurrentGameSpeed());
+        updateScore();
     }
 }
 
-// Update score display
-function updateScore() {
-    document.getElementById('score').textContent = `Score: ${score}`;
+// Handle golden apple effect
+function activateGoldenApple() {
+    isGoldenAppleActive = true;
+    
+    // Clear any existing timer
+    if (goldenAppleTimer) {
+        clearTimeout(goldenAppleTimer);
+    }
+
+    // Update game speed
+    clearInterval(gameLoop);
+    gameLoop = setInterval(update, getCurrentGameSpeed());
+
+    // Set timer to deactivate effect
+    goldenAppleTimer = setTimeout(() => {
+        isGoldenAppleActive = false;
+        clearInterval(gameLoop);
+        gameLoop = setInterval(update, getCurrentGameSpeed());
+    }, GOLDEN_APPLE_DURATION);
 }
 
 // Update game state
@@ -107,13 +337,34 @@ function update() {
     // Add new head
     snake.unshift(head);
 
-    // Check if food is eaten
-    if (head.x === food.x && head.y === food.y) {
-        score += 10;
+    // Check for item collisions
+    const itemIndex = items.findIndex(item => item.x === head.x && item.y === head.y);
+    if (itemIndex !== -1) {
+        const item = items[itemIndex];
+        switch (item.type) {
+            case ITEM_TYPES.NORMAL:
+                score += getCurrentFoodScore();
+                break;
+            case ITEM_TYPES.GOLDEN:
+                score += getCurrentFoodScore() * 3; // Triple points
+                activateGoldenApple();
+                break;
+            case ITEM_TYPES.BOMB:
+                gameOver();
+                return;
+        }
+        // Remove the eaten item
+        items.splice(itemIndex, 1);
+        
+        // Check if we need to reset and respawn items
+        if (!hasApples()) {
+            resetAndRespawnItems();
+        }
+        
         updateScore();
-        generateFood();
+        checkLevelUp();
     } else {
-        // Remove tail if no food was eaten
+        // Remove tail if no item was eaten
         snake.pop();
     }
 
@@ -153,21 +404,52 @@ function draw() {
         );
     });
 
-    // Draw food
-    ctx.fillStyle = '#ff0000';
-    ctx.fillRect(
-        food.x * GRID_SIZE,
-        food.y * GRID_SIZE,
-        GRID_SIZE - 1,
-        GRID_SIZE - 1
-    );
+    // Draw all items
+    const foodSize = getCurrentFoodSize() * GRID_SIZE;
+    const foodOffset = (GRID_SIZE - foodSize) / 2;
+    
+    items.forEach(item => {
+        switch (item.type) {
+            case ITEM_TYPES.NORMAL:
+                ctx.fillStyle = '#ff0000'; // Red for normal apple
+                break;
+            case ITEM_TYPES.GOLDEN:
+                ctx.fillStyle = '#ffd700'; // Gold for golden apple
+                break;
+            case ITEM_TYPES.BOMB:
+                ctx.fillStyle = '#808080'; // Gray for bomb
+                break;
+        }
+
+        ctx.fillRect(
+            item.x * GRID_SIZE + foodOffset,
+            item.y * GRID_SIZE + foodOffset,
+            foodSize - 1,
+            foodSize - 1
+        );
+    });
+
+    // Draw golden apple effect indicator if active
+    if (isGoldenAppleActive) {
+        ctx.fillStyle = 'rgba(255, 215, 0, 0.2)'; // Semi-transparent gold
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+    }
 }
 
 // Game over function
 function gameOver() {
     gameRunning = false;
     clearInterval(gameLoop);
-    document.getElementById('finalScore').textContent = score;
+    if (goldenAppleTimer) {
+        clearTimeout(goldenAppleTimer);
+    }
+    
+    // Add score to high scores if it's high enough
+    if (highScores.length < MAX_HIGH_SCORES || score > highScores[highScores.length - 1].score) {
+        addHighScore(score, level);
+    }
+    
+    document.getElementById('finalScore').textContent = `${score} (Level ${level})`;
     document.getElementById('gameOver').style.display = 'block';
 }
 
@@ -197,5 +479,6 @@ document.addEventListener('keydown', (event) => {
 // Start the game when the page loads
 window.addEventListener('load', () => {
     console.log('Starting Snake Game...');
+    loadHighScores(); // Load high scores immediately
     initGame();
 }); 
